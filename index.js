@@ -17,7 +17,8 @@ app.get('/api', async (req, res) => {
         const svg = await generateSVG(data);
 
         res.setHeader('Content-Type', 'image/svg+xml');
-        res.setHeader('Cache-Control', 'public, max-age=7200'); // Cache for 2 hours
+        // Tell GitHub/browsers to cache for 15 minutes max
+        res.setHeader('Cache-Control', 'public, max-age=900, s-maxage=900, stale-while-revalidate=3600');
         res.send(svg);
     } catch (error) {
         res.status(500).send(`<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100"><text x="10" y="50" fill="red">${error.message}</text></svg>`);
