@@ -7,122 +7,159 @@ async function fetchGitHubData(username) {
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     };
 
+    if (!token) {
+        throw new Error('GITHUB_TOKEN environment variable is missing. It is strictly required for 100% accurate streak and language stats.');
+    }
+
     try {
-        // 1. Fetch user data (REST)
-        const userRes = await axios.get(`https://api.github.com/users/${username}`, { headers });
-        const user = userRes.data;
-
-        // 2. Fetch repo data (REST) for languages and top repos
-        let repos = [];
-        let page = 1;
-        while (true) {
-            const reposRes = await axios.get(`https://api.github.com/users/${username}/repos?per_page=100&page=${page}&sort=updated`, { headers });
-            repos = repos.concat(reposRes.data);
-            if (reposRes.data.length < 100) break;
-            page++;
-        }
-
-        // 3. Extended Stats (GraphQL if token available)
-        let totalCommits = 0;
-        let totalPRs = 0;
-        let totalPRsMerged = 0;
-        let totalIssues = 0;
-        let contributedTo = 0;
-
-        if (token) {
-            try {
-                const query = `
-                query userInfo($login: String!) {
-                    user(login: $login) {
-                        contributionsCollection {
-                            totalCommitContributions
-                            totalPullRequestContributions
-                            totalIssueContributions
-                            totalRepositoriesWithContributedCommits
-                        }
-                        pullRequests(first: 100) {
-                            totalCount
-                            nodes {
-                                state
+        const query = `
+        query userInfo($login: String!) {
+            user(login: $login) {
+                name
+                login
+                bio
+                avatarUrl
+                websiteUrl
+                followers { totalCount }
+                following { totalCount }
+                createdAt
+                repositories(first: 100, ownerAffiliations: OWNER, isFork: false, orderBy: {field: STARGAZERS, direction: DESC}) {
+                    totalCount
+                    nodes {
+                        stargazerCount
+                        forkCount
+                        languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+                            edges {
+                                size
+                                node {
+                                    name
+                                }
                             }
                         }
                     }
-                }`;
-                const graphRes = await axios.post('https://api.github.com/graphql', {
-                    query,
-                    variables: { login: username }
-                }, { headers });
-
-                const data = graphRes.data.data.user;
-                if (data) {
-                    const col = data.contributionsCollection;
-                    totalCommits = col.totalCommitContributions || 0;
-                    totalPRs = col.totalPullRequestContributions || 0;
-                    totalIssues = col.totalIssueContributions || 0;
-                    contributedTo = col.totalRepositoriesWithContributedCommits || 0;
-                    
-                    // Simple estimation for merged PRs from the first 100
-                    const prs = data.pullRequests.nodes || [];
-                    totalPRsMerged = prs.filter(pr => pr.state === 'MERGED').length;
-                    
-                    // Update exact count if search PRs works better, but GraphQL is more reliable.
                 }
-            } catch (err) {
-                console.error("GraphQL error (likely invalid token or permissions):", err.message);
+                gists { totalCount }
+                contributionsCollection {
+                    totalCommitContributions
+                    totalPullRequestContributions
+                    totalIssueContributions
+                    totalRepositoriesWithContributedCommits
+                    contributionCalendar {
+                        totalContributions
+                        weeks {
+                            contributionDays {
+                                contributionCount
+                                date
+                            }
+                        }
+                    }
+                }
+                pullRequests(first: 100, states: MERGED) {
+                    totalCount
+                }
             }
-        } else {
-            // Fallback to Search API (might hit rate limits)
-            try {
-                const [commitsRes, prsRes, prsMergedRes, issuesRes] = await Promise.all([
-                    axios.get(`https://api.github.com/search/commits?q=author:${username}`, { headers }).catch(() => ({ data: { total_count: 0 }})),
-                    axios.get(`https://api.github.com/search/issues?q=author:${username}+type:pr`, { headers }).catch(() => ({ data: { total_count: 0 }})),
-                    axios.get(`https://api.github.com/search/issues?q=author:${username}+type:pr+is:merged`, { headers }).catch(() => ({ data: { total_count: 0 }})),
-                    axios.get(`https://api.github.com/search/issues?q=author:${username}+type:issue`, { headers }).catch(() => ({ data: { total_count: 0 }}))
-                ]);
-                totalCommits = commitsRes.data.total_count;
-                totalPRs = prsRes.data.total_count;
-                totalPRsMerged = prsMergedRes.data.total_count;
-                totalIssues = issuesRes.data.total_count;
-            } catch (err) {
-                console.error("Search API rate limit hit.");
-            }
+        }`;
+
+        const graphRes = await axios.post('https://api.github.com/graphql', {
+            query,
+            variables: { login: username }
+        }, { headers });
+
+        if (graphRes.data.errors) {
+            throw new Error(graphRes.data.errors[0].message);
         }
 
-        // Calculate totals from repos
-        const totalStars = repos.reduce((sum, repo) => sum + repo.stargazers_count, 0);
-        const totalForks = repos.reduce((sum, repo) => sum + repo.forks_count, 0);
+        const data = graphRes.data.data.user;
+        if (!data) throw new Error("User not found via GraphQL");
 
-        // Calculate Languages
+        // Compute Stats
+        const repos = data.repositories.nodes || [];
+        let totalStars = 0;
+        let totalForks = 0;
         const langBytes = {};
+
         repos.forEach(repo => {
-            if (repo.language) {
-                langBytes[repo.language] = (langBytes[repo.language] || 0) + (repo.size || 1);
+            totalStars += repo.stargazerCount;
+            totalForks += repo.forkCount;
+            if (repo.languages && repo.languages.edges) {
+                repo.languages.edges.forEach(edge => {
+                    const langName = edge.node.name;
+                    langBytes[langName] = (langBytes[langName] || 0) + edge.size;
+                });
             }
         });
 
-        // 4. Events for streak (estimation based on recent events)
-        let streakData = { totalContributions: 0, currentStreak: 0, longestStreak: 0 };
-        try {
-            const eventsRes = await axios.get(`https://api.github.com/users/${username}/events/public?per_page=100`, { headers });
-            const events = eventsRes.data;
-            streakData = calculateStreak(events);
-        } catch (err) {
-            console.error("Error fetching events for streak.");
-        }
+        const col = data.contributionsCollection;
+        const totalCommits = col.totalCommitContributions;
+        const totalPRs = col.totalPullRequestContributions;
+        const totalIssues = col.totalIssueContributions;
+        const contributedTo = col.totalRepositoriesWithContributedCommits;
+        const totalPRsMerged = data.pullRequests.totalCount;
 
-        // Return unified data object
+        // Calculate Streak from actual Git Contributions Calendar (Perfect Accuracy for the year)
+        const weeks = col.contributionCalendar.weeks;
+        let currentStreak = 0;
+        let longestStreak = 0;
+        let tempStreak = 0;
+        
+        // Flatten days
+        const allDays = [];
+        weeks.forEach(week => {
+            week.contributionDays.forEach(day => {
+                allDays.push(day);
+            });
+        });
+
+        // Traverse days historically
+        allDays.forEach(day => {
+            if (day.contributionCount > 0) {
+                tempStreak++;
+                if (tempStreak > longestStreak) {
+                    longestStreak = tempStreak;
+                }
+            } else {
+                tempStreak = 0;
+            }
+        });
+
+        // Calculate current streak (counting backward from today or yesterday)
+        const today = new Date();
+        const todayString = today.toISOString().split('T')[0];
+        
+        let foundToday = false;
+        tempStreak = 0;
+        
+        for (let i = allDays.length - 1; i >= 0; i--) {
+            const day = allDays[i];
+            
+            // Skip future days if timezone overlap
+            if (new Date(day.date) > today) continue;
+
+            if (day.contributionCount > 0) {
+                tempStreak++;
+            } else {
+                // If it's today and 0 contributions, we don't break yet because they might have a streak up to yesterday
+                if (!foundToday && day.date === todayString) {
+                    foundToday = true;
+                    continue; // Skip today, check yesterday
+                }
+                break; // Break on any other day with 0 contributions
+            }
+        }
+        currentStreak = tempStreak;
+
         return {
             user: {
-                name: user.name || user.login,
-                login: user.login,
-                bio: user.bio || 'Doing what I like and what I want to be.',
-                avatar_url: user.avatar_url,
-                blog: user.blog,
-                followers: user.followers,
-                following: user.following,
-                created_at: user.created_at,
-                public_repos: user.public_repos,
-                public_gists: user.public_gists
+                name: data.name || data.login,
+                login: data.login,
+                bio: data.bio || 'Doing what I like and what I want to be.',
+                avatar_url: data.avatarUrl,
+                blog: data.websiteUrl || '',
+                followers: data.followers.totalCount,
+                following: data.following.totalCount,
+                created_at: data.createdAt,
+                public_repos: data.repositories.totalCount,
+                public_gists: data.gists.totalCount
             },
             stats: {
                 totalStars,
@@ -133,73 +170,17 @@ async function fetchGitHubData(username) {
                 totalIssues,
                 contributedTo
             },
-            streak: streakData,
+            streak: {
+                totalContributions: col.contributionCalendar.totalContributions,
+                currentStreak,
+                longestStreak
+            },
             languages: langBytes
         };
     } catch (error) {
-        console.error("Error fetching GitHub data:", error.response?.data || error.message);
-        throw new Error('Could not fetch user data');
+        console.error("Error fetching exact GitHub data:", error.response?.data || error.message);
+        throw new Error('Could not fetch accurate user data. Is your GITHUB_TOKEN set inside Vercel Environment Variables?');
     }
-}
-
-function calculateStreak(events) {
-    const pushEvents = events.filter(e => 
-        ['PushEvent', 'CreateEvent', 'PullRequestEvent', 'IssuesEvent', 'PullRequestReviewEvent'].includes(e.type)
-    );
-    
-    // Get unique contribution dates
-    const dates = [...new Set(pushEvents.map(e => {
-        const d = new Date(e.created_at);
-        return d.toISOString().split('T')[0];
-    }))].sort().reverse();
-    
-    if (dates.length === 0) return { totalContributions: 0, currentStreak: 0, longestStreak: 0 };
-    
-    let currentStreak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    const firstDate = new Date(dates[0]);
-    firstDate.setHours(0, 0, 0, 0);
-    
-    if (firstDate >= yesterday) {
-        currentStreak = 1;
-        for (let i = 1; i < dates.length; i++) {
-            const curr = new Date(dates[i - 1]);
-            const prev = new Date(dates[i]);
-            const diffDays = (curr - prev) / (1000 * 60 * 60 * 24);
-            if (diffDays <= 1) {
-                currentStreak++;
-            } else {
-                break;
-            }
-        }
-    }
-    
-    let longestStreak = 1;
-    let tempStreak = 1;
-    const sortedDates = [...dates].sort();
-    
-    for (let i = 1; i < sortedDates.length; i++) {
-        const curr = new Date(sortedDates[i]);
-        const prev = new Date(sortedDates[i - 1]);
-        const diffDays = (curr - prev) / (1000 * 60 * 60 * 24);
-        
-        if (diffDays <= 1) {
-            tempStreak++;
-            if (tempStreak > longestStreak) longestStreak = tempStreak;
-        } else {
-            tempStreak = 1;
-        }
-    }
-    
-    return {
-        totalContributions: pushEvents.length,
-        currentStreak,
-        longestStreak: Math.max(longestStreak, currentStreak)
-    };
 }
 
 module.exports = { fetchGitHubData };
