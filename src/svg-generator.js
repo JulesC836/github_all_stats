@@ -64,33 +64,33 @@ async function generateSVG(data) {
     `;
 
     // ── 1. Profile ─────────────────────────────────────────────────────────
-    const profileHTML = `
-        <g transform="translate(30, 30)">
-            <rect width="890" height="130" rx="12" fill="${cardBg}" stroke="${borderColor}" stroke-width="1"/>
-            <defs>
-                <linearGradient id="avatarGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stop-color="#39d353" />
-                    <stop offset="100%" stop-color="#58a6ff" />
-                </linearGradient>
-            </defs>
-            <circle cx="85" cy="65" r="48" fill="url(#avatarGradient)" />
-            <circle cx="85" cy="65" r="44" fill="${cardBg}" />
-            <clipPath id="avatarClip">
-                <circle cx="85" cy="65" r="40" />
-            </clipPath>
-            <image href="${avatarDataUrl}" x="45" y="25" width="80" height="80" clip-path="url(#avatarClip)" />
-            <circle cx="115" cy="95" r="9" fill="${cardBg}" />
-            <circle cx="115" cy="95" r="6" fill="#39d353" />
-            <text x="160" y="55" class="pri extrabold" font-size="22">${escapeXML(user.name)}</text>
-            <text x="160" y="75" class="sec text-sm" fill="#58a6ff">@${escapeXML(user.login)}</text>
-            <text x="160" y="98" class="sec text-sm">${escapeXML((user.bio || '').substring(0, 80))}</text>
-            <text x="160" y="118" class="sec text-xs">
-                🔗 ${escapeXML(user.blog || 'No website')}   
-                👥 <tspan class="pri bold">${user.followers}</tspan> followers · <tspan class="pri bold">${user.following}</tspan> following   
-                📅 Joined ${joinDate}
-            </text>
-        </g>
-    `;
+    // const profileHTML = `
+    //     <g transform="translate(30, 30)">
+    //         <rect width="890" height="130" rx="12" fill="${cardBg}" stroke="${borderColor}" stroke-width="1"/>
+    //         <defs>
+    //             <linearGradient id="avatarGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+    //                 <stop offset="0%" stop-color="#39d353" />
+    //                 <stop offset="100%" stop-color="#58a6ff" />
+    //             </linearGradient>
+    //         </defs>
+    //         <circle cx="85" cy="65" r="48" fill="url(#avatarGradient)" />
+    //         <circle cx="85" cy="65" r="44" fill="${cardBg}" />
+    //         <clipPath id="avatarClip">
+    //             <circle cx="85" cy="65" r="40" />
+    //         </clipPath>
+    //         <image href="${avatarDataUrl}" x="45" y="25" width="80" height="80" clip-path="url(#avatarClip)" />
+    //         <circle cx="115" cy="95" r="9" fill="${cardBg}" />
+    //         <circle cx="115" cy="95" r="6" fill="#39d353" />
+    //         <text x="160" y="55" class="pri extrabold" font-size="22">${escapeXML(user.name)}</text>
+    //         <text x="160" y="75" class="sec text-sm" fill="#58a6ff">@${escapeXML(user.login)}</text>
+    //         <text x="160" y="98" class="sec text-sm">${escapeXML((user.bio || '').substring(0, 80))}</text>
+    //         <text x="160" y="118" class="sec text-xs">
+    //             🔗 ${escapeXML(user.blog || 'No website')}   
+    //             👥 <tspan class="pri bold">${user.followers}</tspan> followers · <tspan class="pri bold">${user.following}</tspan> following   
+    //             📅 Joined ${joinDate}
+    //         </text>
+    //     </g>
+    // `;
 
     // ── 2. Top 4 cards ─────────────────────────────────────────────────────
     const iconRepos = `<path fill="#58a6ff" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5zm-8 11h8v1.5h-8a1 1 0 110-1.5z"/>`;
