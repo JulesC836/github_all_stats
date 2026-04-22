@@ -23,17 +23,24 @@ async function fetchGitHubData(username) {
                 followers { totalCount }
                 following { totalCount }
                 createdAt
-                repositories(first: 100, ownerAffiliations: OWNER, isFork: false, orderBy: {field: STARGAZERS, direction: DESC}) {
+                organizations(first: 10) {
+                    nodes { login avatarUrl }
+                }
+                repositories(
+                    first: 100,
+                    ownerAffiliations: [OWNER, ORGANIZATION_MEMBER, COLLABORATOR],
+                    isFork: false,
+                    orderBy: {field: STARGAZERS, direction: DESC}
+                ) {
                     totalCount
                     nodes {
                         stargazerCount
                         forkCount
+                        owner { login }
                         languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
                             edges {
                                 size
-                                node {
-                                    name
-                                }
+                                node { name }
                             }
                         }
                     }
@@ -41,9 +48,23 @@ async function fetchGitHubData(username) {
                 gists { totalCount }
                 contributionsCollection {
                     totalCommitContributions
+                    restrictedContributionsCount
                     totalPullRequestContributions
                     totalIssueContributions
                     totalRepositoriesWithContributedCommits
+                    commitContributionsByRepository(maxRepositories: 100) {
+                        contributions { totalCount }
+                        repository {
+                            nameWithOwner
+                            owner { login }
+                            languages(first: 10, orderBy: {field: SIZE, direction: DESC}) {
+                                edges {
+                                    size
+                                    node { name }
+                                }
+                            }
+                        }
+                    }
                     contributionCalendar {
                         totalContributions
                         weeks {
@@ -72,16 +93,18 @@ async function fetchGitHubData(username) {
         const data = graphRes.data.data.user;
         if (!data) throw new Error("User not found via GraphQL");
 
-        // Compute Stats
+        // ── Langages ──────────────────────────────────────────────────────────
+        const langBytes = {};
+
+        // 1. Repos personnels + orgs (ownerAffiliations élargi)
         const repos = data.repositories.nodes || [];
         let totalStars = 0;
         let totalForks = 0;
-        const langBytes = {};
 
         repos.forEach(repo => {
             totalStars += repo.stargazerCount;
             totalForks += repo.forkCount;
-            if (repo.languages && repo.languages.edges) {
+            if (repo.languages?.edges) {
                 repo.languages.edges.forEach(edge => {
                     const langName = edge.node.name;
                     langBytes[langName] = (langBytes[langName] || 0) + edge.size;
@@ -89,82 +112,95 @@ async function fetchGitHubData(username) {
             }
         });
 
+        // 2. Langages depuis les contributions par repo (couvre les repos privés d'orgs)
+        const repoContribs = data.contributionsCollection.commitContributionsByRepository || [];
+        repoContribs.forEach(({ repository }) => {
+            if (repository.languages?.edges) {
+                repository.languages.edges.forEach(edge => {
+                    const langName = edge.node.name;
+                    // Éviter le double comptage des repos déjà inclus ci-dessus
+                    const alreadyCounted = repos.some(r => r.owner?.login + '/' === repository.nameWithOwner.split('/')[0] + '/');
+                    if (!alreadyCounted) {
+                        langBytes[langName] = (langBytes[langName] || 0) + edge.size;
+                    }
+                });
+            }
+        });
+
+        // ── Contributions ─────────────────────────────────────────────────────
         const col = data.contributionsCollection;
-        const totalCommits = col.totalCommitContributions;
+        const totalCommits = col.totalCommitContributions + col.restrictedContributionsCount;
         const totalPRs = col.totalPullRequestContributions;
         const totalIssues = col.totalIssueContributions;
         const contributedTo = col.totalRepositoriesWithContributedCommits;
         const totalPRsMerged = data.pullRequests.totalCount;
 
-        // Calculate Streak from actual Git Contributions Calendar (Perfect Accuracy for the year)
+        // ── Streak ────────────────────────────────────────────────────────────
         const weeks = col.contributionCalendar.weeks;
-        let currentStreak = 0;
         let longestStreak = 0;
         let tempStreak = 0;
-        
-        // Flatten days
+
         const allDays = [];
         weeks.forEach(week => {
-            week.contributionDays.forEach(day => {
-                allDays.push(day);
-            });
+            week.contributionDays.forEach(day => allDays.push(day));
         });
 
-        // Traverse days historically
+        // Longest streak
         allDays.forEach(day => {
             if (day.contributionCount > 0) {
                 tempStreak++;
-                if (tempStreak > longestStreak) {
-                    longestStreak = tempStreak;
-                }
+                if (tempStreak > longestStreak) longestStreak = tempStreak;
             } else {
                 tempStreak = 0;
             }
         });
 
-        // Calculate current streak (counting backward from today or yesterday)
+        // Current streak (en remontant depuis aujourd'hui)
         const today = new Date();
         const todayString = today.toISOString().split('T')[0];
-        
+        let currentStreak = 0;
         let foundToday = false;
         tempStreak = 0;
-        
+
         for (let i = allDays.length - 1; i >= 0; i--) {
             const day = allDays[i];
-            
-            // Skip future days if timezone overlap
+
             if (new Date(day.date) > today) continue;
 
             if (day.contributionCount > 0) {
                 tempStreak++;
             } else {
-                // If it's today and 0 contributions, we don't break yet because they might have a streak up to yesterday
                 if (!foundToday && day.date === todayString) {
                     foundToday = true;
-                    continue; // Skip today, check yesterday
+                    continue;
                 }
-                break; // Break on any other day with 0 contributions
+                break;
             }
         }
         currentStreak = tempStreak;
 
+        // ── Résultat ──────────────────────────────────────────────────────────
         return {
             user: {
                 name: data.name || data.login,
                 login: data.login,
-                bio: data.bio || 'One step every dy',
+                bio: data.bio || '',
                 avatar_url: data.avatarUrl,
                 blog: data.websiteUrl || '',
                 followers: data.followers.totalCount,
                 following: data.following.totalCount,
                 created_at: data.createdAt,
                 public_repos: data.repositories.totalCount,
-                public_gists: data.gists.totalCount
+                public_gists: data.gists.totalCount,
+                organizations: data.organizations.nodes.map(org => ({
+                    login: org.login,
+                    avatar_url: org.avatarUrl
+                }))
             },
             stats: {
                 totalStars,
                 totalForks,
-                totalCommits,
+                totalCommits,        // inclut les commits privés d'orgs
                 totalPRs,
                 totalPRsMerged,
                 totalIssues,
@@ -177,9 +213,10 @@ async function fetchGitHubData(username) {
             },
             languages: langBytes
         };
+
     } catch (error) {
-        console.error("Error fetching exact GitHub data:", error.response?.data || error.message);
-        throw new Error('Could not fetch accurate user data. Is your GITHUB_TOKEN set inside Vercel Environment Variables?');
+        console.error("Error fetching GitHub data:", error.response?.data || error.message);
+        throw new Error('Could not fetch accurate user data. Is your GITHUB_TOKEN set inside your environment variables?');
     }
 }
 
