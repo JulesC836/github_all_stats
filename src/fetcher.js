@@ -8,7 +8,7 @@ async function fetchGitHubData(username) {
     };
 
     if (!token) {
-        throw new Error('GITHUB_TOKEN environment variable is missing. It is strictly required for 100% accurate streak and language stats.');
+        throw new Error('GITHUB_TOKEN environment variable is missing.');
     }
 
     try {
@@ -34,6 +34,7 @@ async function fetchGitHubData(username) {
                 ) {
                     totalCount
                     nodes {
+                        name
                         stargazerCount
                         forkCount
                         owner { login }
@@ -95,15 +96,19 @@ async function fetchGitHubData(username) {
 
         // ── Langages ──────────────────────────────────────────────────────────
         const langBytes = {};
-
-        // 1. Repos personnels + orgs (ownerAffiliations élargi)
         const repos = data.repositories.nodes || [];
         let totalStars = 0;
         let totalForks = 0;
 
+        // Ensemble des nameWithOwner déjà comptés pour éviter le double comptage
+        const countedRepos = new Set();
+
+        // 1. Repos personnels + orgs
         repos.forEach(repo => {
             totalStars += repo.stargazerCount;
             totalForks += repo.forkCount;
+            const fullName = `${repo.owner?.login}/${repo.name}`;
+            countedRepos.add(fullName);
             if (repo.languages?.edges) {
                 repo.languages.edges.forEach(edge => {
                     const langName = edge.node.name;
@@ -112,18 +117,15 @@ async function fetchGitHubData(username) {
             }
         });
 
-        // 2. Langages depuis les contributions par repo (couvre les repos privés d'orgs)
+        // 2. Langages depuis contributions (repos privés d'orgs non encore comptés)
         const repoContribs = data.contributionsCollection.commitContributionsByRepository || [];
         repoContribs.forEach(({ repository }) => {
-            if (repository.languages?.edges) {
+            if (!countedRepos.has(repository.nameWithOwner) && repository.languages?.edges) {
                 repository.languages.edges.forEach(edge => {
                     const langName = edge.node.name;
-                    // Éviter le double comptage des repos déjà inclus ci-dessus
-                    const alreadyCounted = repos.some(r => r.owner?.login + '/' === repository.nameWithOwner.split('/')[0] + '/');
-                    if (!alreadyCounted) {
-                        langBytes[langName] = (langBytes[langName] || 0) + edge.size;
-                    }
+                    langBytes[langName] = (langBytes[langName] || 0) + edge.size;
                 });
+                countedRepos.add(repository.nameWithOwner);
             }
         });
 
@@ -164,7 +166,6 @@ async function fetchGitHubData(username) {
 
         for (let i = allDays.length - 1; i >= 0; i--) {
             const day = allDays[i];
-
             if (new Date(day.date) > today) continue;
 
             if (day.contributionCount > 0) {
@@ -200,7 +201,7 @@ async function fetchGitHubData(username) {
             stats: {
                 totalStars,
                 totalForks,
-                totalCommits,        // inclut les commits privés d'orgs
+                totalCommits,
                 totalPRs,
                 totalPRsMerged,
                 totalIssues,
@@ -215,12 +216,10 @@ async function fetchGitHubData(username) {
         };
 
     } catch (error) {
-        // Log complet pour débugger
         console.error("Status:", error.response?.status);
-        console.error("Headers:", error.response?.headers);
         console.error("Data:", JSON.stringify(error.response?.data, null, 2));
         console.error("Message:", error.message);
-        throw error; // ← throw l'erreur originale, pas le message masqué
+        throw error;
     }
 }
 
