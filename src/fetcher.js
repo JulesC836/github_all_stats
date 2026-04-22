@@ -215,8 +215,12 @@ async function fetchGitHubData(username) {
         };
 
     } catch (error) {
-        console.error("Error fetching GitHub data:", error.response?.data || error.message);
-        throw new Error('Could not fetch accurate user data. Is your GITHUB_TOKEN set inside your environment variables?');
+        // Log complet pour débugger
+        console.error("Status:", error.response?.status);
+        console.error("Headers:", error.response?.headers);
+        console.error("Data:", JSON.stringify(error.response?.data, null, 2));
+        console.error("Message:", error.message);
+        throw error; // ← throw l'erreur originale, pas le message masqué
     }
 }
 
