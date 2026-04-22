@@ -152,7 +152,7 @@ async function fetchGitHubData(username) {
             user: {
                 name: data.name || data.login,
                 login: data.login,
-                bio: data.bio || 'Doing what I like and what I want to be.',
+                bio: data.bio || 'One step every dy',
                 avatar_url: data.avatarUrl,
                 blog: data.websiteUrl || '',
                 followers: data.followers.totalCount,
