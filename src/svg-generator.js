@@ -104,9 +104,9 @@ async function generateSVG(data) {
             <text x="160" y="94"  class="sec sm">${escapeXML((user.bio || '').substring(0, 80))}</text>
             <text x="160" y="116" class="sec xs">
                 🔗 ${escapeXML(user.blog || 'No website')}
-                &nbsp;&nbsp;👥 <tspan class="pri bold">${user.followers}</tspan> followers
+                &#160;&#160;👥 <tspan class="pri bold">${user.followers}</tspan> followers
                 · <tspan class="pri bold">${user.following}</tspan> following
-                &nbsp;&nbsp;📅 Joined ${joinDate}
+                &#160;&#160;📅 Joined ${joinDate}
             </text>
         </g>`;
 
