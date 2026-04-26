@@ -49,9 +49,7 @@ async function generateSVG(data) {
     const INNER_W  = SVG_W - MARGIN * 2;  // 890
     const GAP      = 10;
 
-    const PROFILE_Y  = MARGIN;                              // 30
-    const PROFILE_H  = 130;
-    const CARDS_Y    = PROFILE_Y + PROFILE_H + GAP;        // 170
+    const CARDS_Y    = MARGIN;
     const CARDS_H    = 80;
     const STREAK_Y   = CARDS_Y + CARDS_H + GAP;            // 260
     const STREAK_H   = 180;
@@ -60,11 +58,7 @@ async function generateSVG(data) {
     const HALF_W     = (INNER_W - GAP) / 2;                // 440
     const SVG_H      = BOTTOM_Y + BOTTOM_H + MARGIN;       // 710
 
-    // ── Avatar & date ──────────────────────────────────────────────────────
-    const avatarDataUrl = await getBase64Image(user.avatar_url);
-    const joinDate = new Date(user.created_at).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
-    });
+
 
     // ── CSS ────────────────────────────────────────────────────────────────
     const css = `
@@ -81,34 +75,7 @@ async function generateSVG(data) {
         .mid   { text-anchor: middle; }
     `;
 
-    // ── 1. Profile ─────────────────────────────────────────────────────────
-    const profileHTML = `
-        <g transform="translate(${MARGIN}, ${PROFILE_Y})">
-            <rect width="${INNER_W}" height="${PROFILE_H}" rx="12"
-                  fill="${cardBg}" stroke="${borderColor}" stroke-width="1"/>
-            <defs>
-                <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%"   stop-color="#39d353"/>
-                    <stop offset="100%" stop-color="#58a6ff"/>
-                </linearGradient>
-            </defs>
-            <circle cx="85" cy="65" r="48" fill="url(#avatarGrad)"/>
-            <circle cx="85" cy="65" r="44" fill="${cardBg}"/>
-            <clipPath id="avatarClip"><circle cx="85" cy="65" r="40"/></clipPath>
-            <image href="${avatarDataUrl}" x="45" y="25" width="80" height="80"
-                   clip-path="url(#avatarClip)"/>
-            <circle cx="115" cy="95" r="9" fill="${cardBg}"/>
-            <circle cx="115" cy="95" r="6" fill="#39d353"/>
-            <text x="160" y="52"  class="pri xbold" font-size="22">${escapeXML(user.name)}</text>
-            <text x="160" y="72"  class="sm" fill="#58a6ff">@${escapeXML(user.login)}</text>
-            <text x="160" y="94"  class="sec sm">${escapeXML((user.bio || '').substring(0, 80))}</text>
-            <text x="160" y="116" class="sec xs">
-                🔗 ${escapeXML(user.blog || 'No website')}
-                &#160;&#160;👥 <tspan class="pri bold">${user.followers}</tspan> followers
-                · <tspan class="pri bold">${user.following}</tspan> following
-                &#160;&#160;📅 Joined ${joinDate}
-            </text>
-        </g>`;
+
 
     // ── 2. Top 4 stat cards ────────────────────────────────────────────────
     const iconRepos = `<path fill="#58a6ff" d="M2 2.5A2.5 2.5 0 014.5 0h8.75a.75.75 0 01.75.75v12.5a.75.75 0 01-.75.75h-2.5a.75.75 0 110-1.5h1.75v-2h-8a1 1 0 00-.714 1.7.75.75 0 01-1.072 1.05A2.495 2.495 0 012 11.5v-9zm10.5-1h-8a1 1 0 00-1 1v6.708A2.486 2.486 0 014.5 9h8V1.5zm-8 11h8v1.5h-8a1 1 0 110-1.5z"/>`;
@@ -273,7 +240,6 @@ async function generateSVG(data) {
          xmlns="http://www.w3.org/2000/svg">
         <style>${css}</style>
         <rect width="${SVG_W}" height="${SVG_H}" rx="15" fill="${mainBg}"/>
-        ${profileHTML}
         ${topCardsHTML}
         ${streakSvg}
         ${langHTML}
