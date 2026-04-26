@@ -1,5 +1,8 @@
 const axios = require('axios');
 
+const EXCLUDED_LANGUAGES = ['HTML', 'CSS', 'Blade'];
+
+
 async function fetchGitHubData(username) {
     const token = process.env.GITHUB_TOKEN;
     const headers = {
@@ -112,6 +115,7 @@ async function fetchGitHubData(username) {
             if (repo.languages?.edges) {
                 repo.languages.edges.forEach(edge => {
                     const langName = edge.node.name;
+                    if (EXCLUDED_LANGUAGES.includes(langName)) return;
                     langBytes[langName] = (langBytes[langName] || 0) + edge.size;
                 });
             }
@@ -123,6 +127,7 @@ async function fetchGitHubData(username) {
             if (!countedRepos.has(repository.nameWithOwner) && repository.languages?.edges) {
                 repository.languages.edges.forEach(edge => {
                     const langName = edge.node.name;
+                    if (EXCLUDED_LANGUAGES.includes(langName)) return;
                     langBytes[langName] = (langBytes[langName] || 0) + edge.size;
                 });
                 countedRepos.add(repository.nameWithOwner);

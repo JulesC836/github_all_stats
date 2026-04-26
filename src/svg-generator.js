@@ -109,10 +109,10 @@ async function generateSVG(data) {
     `;
 
     const topCardsHTML = `
-        ${renderCard(30,  user.public_repos,  'REPOS', iconRepos)}
-        ${renderCard(257, stats.totalStars,   'STARS', iconStars)}
-        ${renderCard(484, stats.totalForks,   'FORKS', iconForks)}
-        ${renderCard(710, user.public_gists,  'GISTS', iconGists)}
+        ${renderCard(30, user.public_repos, 'REPOS', iconRepos)}
+        ${renderCard(257, stats.totalStars, 'STARS', iconStars)}
+        ${renderCard(484, stats.totalForks, 'FORKS', iconForks)}
+        ${renderCard(710, user.public_gists, 'GISTS', iconGists)}
     `;
 
     // ── 3. Streak ──────────────────────────────────────────────────────────
@@ -177,13 +177,14 @@ async function generateSVG(data) {
         const lx = col * 200;
         const ly = 60 + (row * 35);
 
+        // Adding a 10px left margin and 5px top margin
         langListHTML += `
-            <g transform="translate(${lx}, ${ly})">
-                <circle cx="5" cy="0" r="5" fill="${color}" />
-                <text x="20" y="4" class="sec text-sm" font-weight="500">${escapeXML(lang)}</text>
-                <text x="170" y="4" class="sec text-sm" font-family="monospace">${percent.toFixed(1)}%</text>
-            </g>
-        `;
+    <g transform="translate(${lx + 10}, ${ly + 5})">
+        <circle cx="5" cy="0" r="5" fill="${color}" />
+        <text x="20" y="4" class="sec text-sm" font-weight="500">${escapeXML(lang)}</text>
+        <text x="170" y="4" class="sec text-sm" font-family="monospace">${percent.toFixed(1)}%</text>
+    </g>
+`;
     });
 
     const langHTML = `
@@ -210,17 +211,16 @@ async function generateSVG(data) {
         <g transform="translate(490, 480)">
             <rect width="430" height="200" rx="12" fill="${cardBg}" stroke="${borderColor}" stroke-width="1"/>
             <text x="25" y="35" class="pri extrabold text-lg">Detailed Stats</text>
-            ${detailRow(75,  'Total Repositories', user.public_repos,   "Stars",       stats.totalStars)}
-            ${detailRow(110, 'Total Forks',        stats.totalForks,    "Total Commits", stats.totalCommits)}
-            ${detailRow(145, 'Total PRs',          stats.totalPRs,      "PRs Merged",  stats.totalPRsMerged)}
-            ${detailRow(180, 'Total Issues',       stats.totalIssues,   "Contributed To", stats.contributedTo)}
+            ${detailRow(75, 'Total Repositories', user.public_repos, "Stars", stats.totalStars)}
+            ${detailRow(110, 'Total Forks', stats.totalForks, "Total Commits", stats.totalCommits)}
+            ${detailRow(145, 'Total PRs', stats.totalPRs, "PRs Merged", stats.totalPRsMerged)}
+            ${detailRow(180, 'Total Issues', stats.totalIssues, "Contributed To", stats.contributedTo)}
         </g>
     `;
 
     return `<svg width="950" height="710" viewBox="0 0 950 710" fill="none" xmlns="http://www.w3.org/2000/svg">
         <style>${css}</style>
         <rect width="950" height="710" rx="15" fill="${mainBg}" />
-        ${profileHTML}
         ${topCardsHTML}
         ${streakSvg}
         ${langHTML}
